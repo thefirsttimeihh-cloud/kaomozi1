@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>顔文字ペット</title>
+    <style>
+        /* 画面全体の設定 */
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden; /* スクロールバーを隠す */
+            background-color: #ffffff; /* 真っ白な背景 */
+            font-family: "Hiragino Kaku Gothic ProN", "Meiryo", sans-serif;
+            color: #333333;
+        }
+
+        /* ペットのコンテナ（位置制御用） */
+        #pet-container {
+            position: absolute;
+            left: 0;
+            top: 0;
+            /* requestAnimationFrameでJSからtranslateを更新します */
+            will-change: transform;
+        }
+
+        /* 顔文字本体（反転・アニメーション用） */
+        #pet-face {
+            font-size: 3rem;
+            white-space: nowrap;
+            user-select: none;
+            /* 反転を滑らかにするためのトランジション */
+            transition: transform 0.3s ease;
+            transform-origin: center center;
+            display: inline-block;
+        }
+
+        /* 歩行中の上下の弾みアニメーション */
+        @keyframes walk-bounce {
+            0%, 100% { transform: translateY(0) scaleX(var(--direction)); }
+            50% { transform: translateY(-8px) scaleX(var(--direction)); }
+        }
+
+        .is-walking {
+            animation: walk-bounce 0.6s infinite;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- ペットの要素 -->
+    <div id="pet-container">
+        <div id="pet-face">( ˘ω˘ )</div>
+    </div>
+
+    <script>
+        // 顔文字の辞書
+        const idleFaces = [
+            "( ˘ω˘ )", 
+            "_(:3」∠)_", 
+            "( ˙-˙ )", 
+            "( ¯꒳¯ )", 
+            "( ˘θ˘ )", 
+            "(:3[___]"
+        ];
+        const movingFaces = [
+            "(ง ˙ω˙)ว", 
+            "ᕕ( ᐛ )ᕗ", 
+            "ε＝┏(･ω･)┛", 
+            "(੭ ᐕ)੭", 
+            "(((((((((((っ･ω･)っ",
+            "C= C= ＼( ;・_・)／"
+        ];
+
+        // DOM要素の取得
+        const container = document.getElementById('pet-container');
+        const face = document.getElementById('pet-face');
+
+        // ペットの状態管理
+        let x = window.innerWidth / 2;
+        let y = window.innerHeight / 2;
+        let vx = 0;
+        let vy = 0;
+        let direction = 1; // 1: 右向き, -1: 左向き
+        let isMoving = false;
+        let stateTimer = 0; // 状態を維持する残り時間
+        let lastTime = performance.now();
+
+        // ランダムな配列要素を取得するヘルパー関数
+        function getRandomItem(arr) {
+            return arr[Math.floor(Math.random() * arr.length)];
+        }
+
+        // 状態（移動/停止）の切り替え
+        function changeState() {
+            // 60%の確率で移動、40%の確率で停止
+            isMoving = Math.random() > 0.4;
+
+            if (isMoving) {
+                // 移動状態へ移行
+                face.textContent = getRandomItem(movingFaces);
+                face.classList.add('is-walking');
+                
+                // ランダムな方向とゆっくりな速度を設定
+                const angle = Math.random() * Math.PI * 2;
+                const speed = 0.5 + Math.random() * 1.5; // 0.5 〜 2.0 ピクセル/フレーム
+                vx = Math.cos(angle) * speed;
+                vy = Math.sin(angle) * speed;
+                
+                // 進行方向に応じて反転フラグを設定
+                direction = vx >= 0 ? 1 : -1;
+                face.style.setProperty('--direction', direction);
+                face.style.transform = `scaleX(${direction})`;
+
+                // 3〜8秒間歩く
+                stateTimer = 3000 + Math.random() * 5000;
+            } else {
+                // 停止（休憩）状態へ移行
+                face.textContent = getRandomItem(idleFaces);
+                face.classList.remove('is-walking');
+                
+                vx = 0;
+                vy = 0;
+                // 停止時は直前の向きを維持
+                face.style.transform = `scaleX(${direction})`;
+
+                // 2〜5秒間休む
+                stateTimer = 2000 + Math.random() * 3000;
+            }
+        }
+
+        // 初期の状態を設定
+        changeState();
+
+        // アニメーションループ
+        function animate(time) {
+            const dt = time - lastTime;
+            lastTime = time;
+
+            // タイマーを減らし、0になったら状態を切り替える
+            stateTimer -= dt;
+            if (stateTimer <= 0) {
+                changeState();
+            }
+
+            if (isMoving) {
+                // 位置の更新
+                x += vx;
+                y += vy;
+
+                // 画面端の衝突判定用の幅と高さを取得
+                const rect = face.getBoundingClientRect();
+                const w = rect.width;
+                const h = rect.height;
+
+                // 画面の境界でバウンドさせる（見切れないようにする）
+                let hitWall = false;
+                if (x < 0) {
+                    x = 0;
+                    vx *= -1;
+                    hitWall = true;
+                } else if (x + w > window.innerWidth) {
+                    x = window.innerWidth - w;
+                    vx *= -1;
+                    hitWall = true;
+                }
+
+                if (y < 0) {
+                    y = 0;
+                    vy *= -1;
+                } else if (y + h > window.innerHeight) {
+                    y = window.innerHeight - h;
+                    vy *= -1;
+                }
+
+                // 壁に当たって左右の進行方向が変わった場合、顔の向きも反転させる
+                if (hitWall) {
+                    direction = vx >= 0 ? 1 : -1;
+                    face.style.setProperty('--direction', direction);
+                    face.style.transform = `scaleX(${direction})`;
+                }
+            }
+
+            // コンテナの位置を更新 (滑らかに移動)
+            container.style.transform = `translate(${x}px, ${y}px)`;
+
+            // 次のフレームを要求
+            requestAnimationFrame(animate);
+        }
+
+        // ウィンドウリサイズ時に画面外に取り残されないようにする
+        window.addEventListener('resize', () => {
+            const w = face.getBoundingClientRect().width;
+            const h = face.getBoundingClientRect().height;
+            if (x + w > window.innerWidth) x = window.innerWidth - w;
+            if (y + h > window.innerHeight) y = window.innerHeight - h;
+            if (x < 0) x = 0;
+            if (y < 0) y = 0;
+        });
+
+        // アニメーション開始
+        requestAnimationFrame(animate);
+    </script>
+</body>
+</html>
